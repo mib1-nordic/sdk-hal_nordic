@@ -1,35 +1,4 @@
-/*
- * Copyright (c) 2022 - 2024, Nordic Semiconductor ASA
- * All rights reserved.
- *
- * SPDX-License-Identifier: BSD-3-Clause
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+/*$$$LICENCE_NORDIC_STANDARD<2022>$$$*/
 
 #include <nrfx_example.h>
 #include <nrfx_timer.h>
@@ -50,11 +19,16 @@
  *          the specified time.
  */
 
-/** @brief Symbol specifying timer instance to be used. */
-#define TIMER_INST_IDX 0
-
 /** @brief Symbol specifying time in milliseconds to wait for handler execution. */
 #define TIME_TO_WAIT_MS 5000UL
+
+/** @brief TIMER instance used in the example. */
+static nrfx_timer_t timer_inst = NRFX_TIMER_INSTANCE(NRF_TIMER_INST_GET(TIMER_INST_IDX));
+
+#if !defined(__ZEPHYR__)
+/* Define an IRQ handler named nrfx_timer_<TIMER_INST_IDX>_irq_handler. */
+NRFX_INSTANCE_IRQ_HANDLER_DEFINE(timer, TIMER_INST_IDX, &timer_inst);
+#endif
 
 /**
  * @brief Function for handling TIMER driver events.
@@ -86,7 +60,7 @@ int main(void)
 
 #if defined(__ZEPHYR__)
     IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_TIMER_INST_GET(TIMER_INST_IDX)), IRQ_PRIO_LOWEST,
-                NRFX_TIMER_INST_HANDLER_GET(TIMER_INST_IDX), 0, 0);
+                nrfx_timer_irq_handler, &timer_inst, 0);
 #endif
 
     NRFX_EXAMPLE_LOG_INIT();
@@ -94,14 +68,13 @@ int main(void)
     NRFX_LOG_INFO("Starting nrfx_timer basic example:");
     NRFX_EXAMPLE_LOG_PROCESS();
 
-    nrfx_timer_t timer_inst = NRFX_TIMER_INSTANCE(TIMER_INST_IDX);
     uint32_t base_frequency = NRF_TIMER_BASE_FREQUENCY_GET(timer_inst.p_reg);
     nrfx_timer_config_t config = NRFX_TIMER_DEFAULT_CONFIG(base_frequency);
     config.bit_width = NRF_TIMER_BIT_WIDTH_32;
     config.p_context = "Some context";
 
     status = nrfx_timer_init(&timer_inst, &config, timer_handler);
-    NRFX_ASSERT(status == NRFX_SUCCESS);
+    NRFX_ASSERT(status == 0);
 
     nrfx_timer_clear(&timer_inst);
 

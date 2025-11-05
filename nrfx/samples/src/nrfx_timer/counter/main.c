@@ -1,35 +1,4 @@
-/*
- * Copyright (c) 2022 - 2024, Nordic Semiconductor ASA
- * All rights reserved.
- *
- * SPDX-License-Identifier: BSD-3-Clause
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+/*$$$LICENCE_NORDIC_STANDARD<2022>$$$*/
 
 #include <nrfx_example.h>
 #include <nrfx_timer.h>
@@ -51,12 +20,6 @@
  *          is executed when the counter value is equal to @ref COUNTER_MAX_VAL.
  */
 
-/** @brief Symbol specifying timer instance to be used in timer mode (T). */
-#define TIMER_T_INST_IDX 0
-
-/** @brief Symbol specifying timer instance to be used in counter mode (C). */
-#define TIMER_C_INST_IDX 1
-
 /** @brief Symbol specifying time in milliseconds to wait for handler execution. */
 #define TIME_TO_WAIT_MS 1000UL
 
@@ -72,43 +35,55 @@
 /** @brief Global variable that is used to increment the value of a counter. */
 static volatile bool m_counter_inc_flag = false;
 
+/** @brief TIMER instance used in the example as a timer. */
+static nrfx_timer_t timer_t_inst = NRFX_TIMER_INSTANCE(NRF_TIMER_INST_GET(TIMER_T_INST_IDX));
+
+
+/** @brief TIMER instance used in the example as a counter. */
+static nrfx_timer_t timer_c_inst = NRFX_TIMER_INSTANCE(NRF_TIMER_INST_GET(TIMER_C_INST_IDX));
+
+#if !defined(__ZEPHYR__)
+/* Define an IRQ handler named nrfx_timer_<TIMER_T_INST_IDX>_irq_handler. */
+NRFX_INSTANCE_IRQ_HANDLER_DEFINE(timer, TIMER_T_INST_IDX, &timer_t_inst);
+
+/* Define an IRQ handler named nrfx_timer_<TIMER_C_INST_IDX>_irq_handler. */
+NRFX_INSTANCE_IRQ_HANDLER_DEFINE(timer, TIMER_C_INST_IDX, &timer_c_inst);
+#endif
+
 /**
- * @brief Function for handling TIMER driver events.
+ * @brief Function for handling TIMER driver events for TIMER instance in timer mode.
  *
  * @param[in] event_type Timer event.
  * @param[in] p_context  General purpose parameter set during initialization of
  *                       the timer. This parameter can be used to pass
  *                       additional information to the handler function, for
- *                       example, the timer ID. In this example p_context is used to
- *                       pass address of Timer instance that calls this handler.
+ *                       example, the timer ID. In this example p_context is not used.
  */
 static void timer_handler(nrf_timer_event_t event_type, void * p_context)
 {
-    nrfx_timer_t * timer_inst = p_context;
     static uint32_t timer_val = TIMER_START_VAL;
 
-    /* Creating timer driver instances to ensure that timer_X_inst.instance_id field matches
-     * timer_inst->instance_id. For example if user enables only timer2 with timer1 and timer0
-     * disabled, then timer2->instance_id == 0.
-     */
-    nrfx_timer_t timer_t_inst = NRFX_TIMER_INSTANCE(TIMER_T_INST_IDX);
-    nrfx_timer_t timer_c_inst = NRFX_TIMER_INSTANCE(TIMER_C_INST_IDX);
+    /* Configuring timer to count from TIMER_START_VAL to TIMER_MAX_VAL */
+    NRFX_LOG_INFO("Timer: %u", timer_val);
+    (timer_val == TIMER_MAX_VAL) ? timer_val = TIMER_START_VAL : timer_val++;
 
-    if (timer_inst->instance_id == timer_t_inst.instance_id)
+    if (timer_val == TIMER_START_VAL)
     {
-        /* Configuring timer to count form TIMER_START_VAL to TIMER_MAX_VAL */
-        NRFX_LOG_INFO("Timer: %u", timer_val);
-        (timer_val == TIMER_MAX_VAL) ? timer_val = TIMER_START_VAL : timer_val++;
+        m_counter_inc_flag = true;
+    }
+}
 
-        if (timer_val == TIMER_START_VAL)
-        {
-            m_counter_inc_flag = true;
-        }
-    }
-    else if (timer_inst->instance_id == timer_c_inst.instance_id)
-    {
-        NRFX_LOG_INFO("Counter finished");
-    }
+/**
+ * @brief Function for handling TIMER driver events for the TIMER instance in counter mode.
+ *
+ * @param[in] event_type Timer event.
+ * @param[in] p_context  Just like in case of @ref timer_handler, this parameter could
+ *                       be used to pass additional information set during initialization.
+ *                       In this example it is not used.
+ */
+static void counter_handler(nrf_timer_event_t event_type, void * p_context)
+{
+    NRFX_LOG_INFO("Counter finished");
 }
 
 /**
@@ -123,9 +98,9 @@ int main(void)
 
 #if defined(__ZEPHYR__)
     IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_TIMER_INST_GET(TIMER_T_INST_IDX)), IRQ_PRIO_LOWEST,
-                NRFX_TIMER_INST_HANDLER_GET(TIMER_T_INST_IDX), 0, 0);
+                nrfx_timer_irq_handler, &timer_t_inst, 0);
     IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_TIMER_INST_GET(TIMER_C_INST_IDX)), IRQ_PRIO_LOWEST,
-                NRFX_TIMER_INST_HANDLER_GET(TIMER_C_INST_IDX), 0, 0);
+                nrfx_timer_irq_handler, &timer_c_inst, 0);
 #endif
 
     NRFX_EXAMPLE_LOG_INIT();
@@ -133,25 +108,20 @@ int main(void)
     NRFX_LOG_INFO("Starting nrfx_timer basic counter example.");
     NRFX_EXAMPLE_LOG_PROCESS();
 
-    /* Configuring timer instances, one in timer mode and one in counter mode.
-     * Assigning their own addresses to p_context variable - in order to reference them
-     * in timer_handler() function. Setting frequency to the base frequency value of the
-     * specified timer instance.
+    /* Configuring timer instances, one in timer mode and one in counter mode. assigning an event
+     * handler for each of them and setting frequency to the base frequency value of the specified
+     * timer instance.
      */
-    nrfx_timer_t timer_t_inst = NRFX_TIMER_INSTANCE(TIMER_T_INST_IDX);
     uint32_t base_frequency = NRF_TIMER_BASE_FREQUENCY_GET(timer_t_inst.p_reg);
     nrfx_timer_config_t config = NRFX_TIMER_DEFAULT_CONFIG(base_frequency);
     config.bit_width = NRF_TIMER_BIT_WIDTH_32;
-    config.p_context = &timer_t_inst;
     status = nrfx_timer_init(&timer_t_inst, &config, timer_handler);
-    NRFX_ASSERT(status == NRFX_SUCCESS);
+    NRFX_ASSERT(status == 0);
 
-    nrfx_timer_t timer_c_inst = NRFX_TIMER_INSTANCE(TIMER_C_INST_IDX);
     config.frequency = NRF_TIMER_BASE_FREQUENCY_GET(timer_c_inst.p_reg);
     config.mode = NRF_TIMER_MODE_COUNTER;
-    config.p_context = &timer_c_inst;
-    status = nrfx_timer_init(&timer_c_inst, &config, timer_handler);
-    NRFX_ASSERT(status == NRFX_SUCCESS);
+    status = nrfx_timer_init(&timer_c_inst, &config, counter_handler);
+    NRFX_ASSERT(status == 0);
 
     NRFX_LOG_INFO("Time between timer ticks: %lu ms", TIME_TO_WAIT_MS);
 

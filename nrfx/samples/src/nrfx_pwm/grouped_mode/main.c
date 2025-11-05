@@ -1,35 +1,4 @@
-/*
- * Copyright (c) 2022 - 2024, Nordic Semiconductor ASA
- * All rights reserved.
- *
- * SPDX-License-Identifier: BSD-3-Clause
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+/*$$$LICENCE_NORDIC_STANDARD<2022>$$$*/
 
 #include <nrfx_example.h>
 #include <nrfx_pwm.h>
@@ -52,9 +21,6 @@
  *          relevant log message after every loop. Additionally, it changes SEQ1 each time it is
  *          called.
  */
-
-/** @brief Symbol specifying PWM instance to be used. */
-#define PWM_INST_IDX 0
 
 /**
  * @brief Symbol specifying number of times that each duty cycle is to be repeated (after being
@@ -91,6 +57,14 @@
     .repeats          = VALUE_REPEATS,                  \
     .end_delay        = 0                               \
 }
+
+/** @brief PWM instance used in the example. */
+static nrfx_pwm_t pwm_instance = NRFX_PWM_INSTANCE(NRF_PWM_INST_GET(PWM_INST_IDX));
+
+#if !defined(__ZEPHYR__)
+/* Define an IRQ handler named nrfx_pwm_<PWM_INST_IDX>_irq_handler. */
+NRFX_INSTANCE_IRQ_HANDLER_DEFINE(pwm, PWM_INST_IDX, &pwm_instance);
+#endif
 
 /** @brief Array with duty cycle values that are used to achieve blinking effect on LEDs. */
 static nrf_pwm_values_grouped_t pwm_val0[] =
@@ -153,9 +127,8 @@ static nrf_pwm_sequence_t seq[] =
  *                       the timer. This parameter can be used to pass
  *                       additional information to the handler function.
  */
-static void pwm_handler(nrfx_pwm_evt_type_t event_type, void * p_context)
+static void pwm_handler(nrfx_pwm_event_type_t event_type, void * p_context)
 {
-    nrfx_pwm_t * inst = p_context;
     static uint32_t m_curr_loop = 1;
     static bool m_playback_mode = false;
 
@@ -165,19 +138,19 @@ static void pwm_handler(nrfx_pwm_evt_type_t event_type, void * p_context)
 
     if (m_playback_mode)
     {
-        nrfx_pwm_sequence_update(inst, 1, &seq[2]);
+        nrfx_pwm_sequence_update(&pwm_instance, 1, &seq[2]);
         NRFX_LOG_INFO("SEQ1 changed to sequence number 2 from the seq array");
     }
     else
     {
-        nrfx_pwm_sequence_update(inst, 1, &seq[1]);
+        nrfx_pwm_sequence_update(&pwm_instance, 1, &seq[1]);
         NRFX_LOG_INFO("SEQ1 changed to sequence number 1 from the seq array");
     }
 
     if (m_curr_loop == NUM_OF_LOOPS)
     {
         NRFX_LOG_INFO("PWM finished");
-        nrfx_pwm_uninit(inst);
+        nrfx_pwm_uninit(&pwm_instance);
     }
 
     m_curr_loop++;
@@ -195,7 +168,7 @@ int main(void)
 
 #if defined(__ZEPHYR__)
     IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_PWM_INST_GET(PWM_INST_IDX)), IRQ_PRIO_LOWEST,
-                NRFX_PWM_INST_HANDLER_GET(PWM_INST_IDX), 0, 0);
+                nrfx_pwm_irq_handler, &pwm_instance, 0);
 #endif
 
     NRFX_EXAMPLE_LOG_INIT();
@@ -203,11 +176,11 @@ int main(void)
     NRFX_LOG_INFO("Starting nrfx_pwm example for sequences loaded in grouped mode.");
     NRFX_EXAMPLE_LOG_PROCESS();
 
-    nrfx_pwm_t pwm_instance = NRFX_PWM_INSTANCE(PWM_INST_IDX);
-    nrfx_pwm_config_t config = NRFX_PWM_DEFAULT_CONFIG(LED1_PIN, LED4_PIN, LED2_PIN, LED3_PIN);
+    nrfx_pwm_config_t config = NRFX_PWM_DEFAULT_CONFIG(PWM_LED1_PIN, PWM_LED2_PIN,
+                                                       PWM_LED3_PIN, PWM_LED4_PIN);
     config.load_mode = NRF_PWM_LOAD_GROUPED;
-    status = nrfx_pwm_init(&pwm_instance, &config, pwm_handler, &pwm_instance);
-    NRFX_ASSERT(status == NRFX_SUCCESS);
+    status = nrfx_pwm_init(&pwm_instance, &config, pwm_handler, NULL);
+    NRFX_ASSERT(status == 0);
 
     nrfx_pwm_complex_playback(&pwm_instance, &seq[0], &seq[1], PLAYBACK_COUNT, NRFX_PWM_FLAG_LOOP);
 

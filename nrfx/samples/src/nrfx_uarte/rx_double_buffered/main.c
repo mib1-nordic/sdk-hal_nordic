@@ -1,35 +1,4 @@
-/*
- * Copyright (c) 2022 - 2024, Nordic Semiconductor ASA
- * All rights reserved.
- *
- * SPDX-License-Identifier: BSD-3-Clause
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+/*$$$LICENCE_NORDIC_STANDARD<2022>$$$*/
 
 #include <nrfx_example.h>
 #include <nrfx_uarte.h>
@@ -56,15 +25,6 @@
  *          The @ref uarte_handler() is executed with relevant log messages.
  */
 
-/** @brief Symbol specifying UARTE instance to be used. */
-#define UARTE_INST_IDX 1
-
-/** @brief Symbol specifying TX pin number of UARTE. */
-#define UARTE_TX_PIN LOOPBACK_PIN_1A
-
-/** @brief Symbol specifying RX pin number of UARTE. */
-#define UARTE_RX_PIN LOOPBACK_PIN_1B
-
 /** @brief Symbol specifying the first message to be sent via UARTE data transfer as part of @ref m_tx_buffer. */
 #define MSG1 "Nordic"
 
@@ -87,6 +47,14 @@ typedef struct
     uint8_t buff_3[sizeof(MSG2)];   ///< RX buffer 3
 } rx_buffers_t;
 
+/** @brief UARTE instance used in the example. */
+static nrfx_uarte_t uarte_inst = NRFX_UARTE_INSTANCE(NRF_UARTE_INST_GET(UARTE_INST_IDX));
+
+#if !defined(__ZEPHYR__)
+/* Define an IRQ handler named nrfx_timer_<UARTE_INST_IDX>_irq_handler. */
+NRFX_INSTANCE_IRQ_HANDLER_DEFINE(uarte, UARTE_INST_IDX, &uarte_inst);
+#endif
+
 /**
  *  @brief UARTE transmit buffer, it is later filled with @ref MSG1, @ref MSG2 and @ref MSG3 to store
  *         following message: "Nordic Semiconductor nRF".
@@ -104,9 +72,9 @@ static rx_buffers_t m_rx_buffers;
 static void rx_buffers_print(rx_buffers_t * p_rx_buff)
 {
     NRFX_LOG_INFO("................................");
-    NRFX_LOG_INFO("RX buffer1 - addr: %p | content: %s", p_rx_buff->buff_1, p_rx_buff->buff_1);
-    NRFX_LOG_INFO("RX buffer2 - addr: %p | content: %s", p_rx_buff->buff_2, p_rx_buff->buff_2);
-    NRFX_LOG_INFO("RX buffer3 - addr: %p | content: %s", p_rx_buff->buff_3, p_rx_buff->buff_3);
+    NRFX_LOG_INFO("RX buffer1 - addr: %p | content: %s", (void *)p_rx_buff->buff_1, p_rx_buff->buff_1);
+    NRFX_LOG_INFO("RX buffer2 - addr: %p | content: %s", (void *)p_rx_buff->buff_2, p_rx_buff->buff_2);
+    NRFX_LOG_INFO("RX buffer3 - addr: %p | content: %s", (void *)p_rx_buff->buff_3, p_rx_buff->buff_3);
     NRFX_LOG_INFO("................................");
     NRFX_EXAMPLE_LOG_PROCESS();
 }
@@ -124,23 +92,22 @@ static void uarte_handler(nrfx_uarte_event_t const * p_event, void * p_context)
     nrfx_err_t status;
     (void)status;
 
-    nrfx_uarte_t * p_inst = p_context;
     static uint8_t num_handler_exec = 0;
 
     switch (num_handler_exec++)
     {
         case 0:
-            status = nrfx_uarte_rx(p_inst,
-                                   m_rx_buffers.buff_3,
-                                   NRFX_ARRAY_SIZE(m_rx_buffers.buff_3) - 1);
-            NRFX_ASSERT(status == NRFX_SUCCESS);
+            status = nrfx_uarte_rx_buffer_set(&uarte_inst,
+                                              m_rx_buffers.buff_3,
+                                              NRFX_ARRAY_SIZE(m_rx_buffers.buff_3) - 1);
+            NRFX_ASSERT(status == 0);
             break;
 
         case 1:
-            status = nrfx_uarte_rx(p_inst,
-                                   m_rx_buffers.buff_2,
-                                   NRFX_ARRAY_SIZE(m_rx_buffers.buff_2) - 1);
-            NRFX_ASSERT(status == NRFX_SUCCESS);
+            status = nrfx_uarte_rx_buffer_set(&uarte_inst,
+                                              m_rx_buffers.buff_2,
+                                              NRFX_ARRAY_SIZE(m_rx_buffers.buff_2) - 1);
+            NRFX_ASSERT(status == 0);
             break;
     }
 
@@ -148,7 +115,6 @@ static void uarte_handler(nrfx_uarte_event_t const * p_event, void * p_context)
     {
         NRFX_LOG_INFO("--> TX done");
         NRFX_LOG_INFO("--> Bytes transfered: %u", p_event->data.tx.length);
-        nrfx_uarte_uninit(p_inst);
     }
 }
 
@@ -164,7 +130,7 @@ int main(void)
 
 #if defined(__ZEPHYR__)
     IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_UARTE_INST_GET(UARTE_INST_IDX)), IRQ_PRIO_LOWEST,
-                NRFX_UARTE_INST_HANDLER_GET(UARTE_INST_IDX), 0, 0);
+                nrfx_uarte_irq_handler, &uarte_inst, 0);
 #endif
 
     NRFX_EXAMPLE_LOG_INIT();
@@ -172,11 +138,9 @@ int main(void)
     NRFX_LOG_INFO("Starting nrfx_uarte RX double-buffered example.");
     NRFX_EXAMPLE_LOG_PROCESS();
 
-    nrfx_uarte_t uarte_inst = NRFX_UARTE_INSTANCE(UARTE_INST_IDX);
     nrfx_uarte_config_t uarte_config = NRFX_UARTE_DEFAULT_CONFIG(UARTE_TX_PIN, UARTE_RX_PIN);
-    uarte_config.p_context = &uarte_inst;
     status = nrfx_uarte_init(&uarte_inst, &uarte_config, uarte_handler);
-    NRFX_ASSERT(status == NRFX_SUCCESS);
+    NRFX_ASSERT(status == 0);
 
     /* Declaration and filling m_tx_buffer to store desired msg ("Nordic Semiconductor nRF"). */
     memcpy(m_tx_buffer                              , MSG1, strlen(MSG1));
@@ -186,16 +150,22 @@ int main(void)
 
     rx_buffers_print(&m_rx_buffers);
 
-    status = nrfx_uarte_rx(&uarte_inst,
-                           m_rx_buffers.buff_1,
-                           NRFX_ARRAY_SIZE(m_rx_buffers.buff_1) - 1);
-    NRFX_ASSERT(status == NRFX_SUCCESS);
+    status = nrfx_uarte_rx_buffer_set(&uarte_inst,
+                                      m_rx_buffers.buff_1,
+                                      NRFX_ARRAY_SIZE(m_rx_buffers.buff_1) - 1);
+    NRFX_ASSERT(status == 0);
+
+    status = nrfx_uarte_rx_enable(&uarte_inst,
+                                  NRFX_UARTE_RX_ENABLE_CONT | NRFX_UARTE_RX_ENABLE_STOP_ON_END);
+    NRFX_ASSERT(status == 0);
 
     status = nrfx_uarte_tx(&uarte_inst, m_tx_buffer, NRFX_ARRAY_SIZE(m_tx_buffer), 0);
-    NRFX_ASSERT(status == NRFX_SUCCESS);
+    NRFX_ASSERT(status == 0);
 
     while (nrfx_uarte_tx_in_progress(&uarte_inst))
     {}
+
+    nrfx_uarte_uninit(&uarte_inst);
 
     rx_buffers_print(&m_rx_buffers);
 
